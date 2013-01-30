@@ -1,0 +1,52 @@
+mmalloc - Dynamic memory checker. 
+
+mmalloc features
+
+    Buffer overrun and underrun detection
+    Leak detection
+    Detects use of freed blocks
+    Backtrace of the allocation path, error path and freed path (where appropriate)
+    Checkpoints to sieve the problem in your own code
+    Some statistics
+    High configurability allows finetuning of checking overhead, for development/production scenarios
+    Fast: with all features disabled, close to or surpasses malloc in glibc
+    Prevents fragmentation
+
+mmalloc drawbacks
+
+    Space overhead is double on average
+
+
+Why another malloc debugger?
+
+There are tons of dynamic memory checkers out there.
+mmalloc was born to fill a gap when other freely
+avaible checkers failed:
+
+mmalloc was originally developed to find errors in
+MUD game driver (ldmud). This driver was running
+mud (bat.org) where the memory footprint of running
+game would exceed 1.2Gbytes. This was where all 
+other freely available (at that time) memory check
+tools failed. Either they refused to allocate so much
+or just were plain too slow to runn the actual game
+(with users!) and thus trigger the problem i was
+trying to track.
+
+The performance of the game had to remain decent so that
+users would play the game even when memory checker was
+active. The design goal of mmalloc was to let developer
+control the cpu-memory overhead versus checking 
+details/coverage. Developer has great deal of control
+about tuning the checking process (see mconfig.h).
+You can use mmalloc whole development cycle and tune it
+so that performance degration is acceptable.
+
+It has been useful for me so I release it hoping
+it would be useful for you too.
+
+If mmalloc helps you find a problem or if
+it fails to find one, I would still like
+to hear your experiences about it.
+
+-- Mika < miku (at) iki.fi >
