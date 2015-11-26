@@ -3,8 +3,8 @@
 LIBCC=gcc
 CFLAGS=-Wall -g -D_GNU_SOURCE -fno-omit-frame-pointer -O0 -c
 
+LIBS=-lbfd -liberty
 CC=$(LIBCC) $(CFLAGS)
-LINK = $(LIBCC) -lbfd -liberty
 
 ifeq ($(LIBCC), g++)
 MYCPP=g++ $(CFLAGS)
@@ -30,13 +30,13 @@ objects = mmalloc.o mbacktrace.o msymtab.o
 
 libmmalloc.a: $(objects)
 	 ar -r libmmalloc.a $(EXTRALIBS) mmalloc.o mbacktrace.o msymtab.o
-	 
+
 generror: libmmalloc.a generror.o
-	$(LINK) -o generror generror.o libmmalloc.a
+	gcc -o generror generror.o libmmalloc.a $(LIBS)
 
 ifdef MYCPP
 cpperror: libmmalloc.a cpperror.o
-	$(LINK) -o cpperror libmmalloc.a cpperror.o
+	gcc -o cpperror libmmalloc.a cpperror.o $(LIBS)
 
 cpperror.o: %.o: %.cpp mmalloc.h mconfig.h msymtab.h mbacktrace.h
 	$(MYCPP) $< -o $@

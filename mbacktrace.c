@@ -81,7 +81,7 @@ int getbacktrace (void **array, int size)
 
 int getbacktrace (void **array, int size)
 {
-  void *retAddr = NULL;
+  void *retAddr = 0;
   unsigned int n = 0;
 
   while (1) {
@@ -106,7 +106,7 @@ int getbacktrace (void **array, int size)
     case 17: retAddr = __builtin_return_address(17); break;
     case 18: retAddr = __builtin_return_address(18); break;
     case 19: retAddr = __builtin_return_address(19); break;
-    default: retAddr = NULL; break;
+    default: retAddr = 0; break;
     }
 
     if (retAddr && n<size) {

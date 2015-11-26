@@ -19,6 +19,7 @@
  */
 
 #include "msymtab.h"
+#include <elf.h>
 #include <bfd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,7 +28,7 @@
 
 #define MMALLOC_LIB
 
-#if defined(__linux__) && defined(__i386__)
+#if defined(__linux__)
 #include <link.h>
 #endif
 

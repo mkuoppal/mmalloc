@@ -783,12 +783,10 @@ static inline block_head_t* alloc_block_from_region(region_t* reg, const size_t 
 static inline void free_block(block_head_t* head)
 {
 	region_t* reg;
-	unsigned char* ptr;
 
 	reg = head->myreg;
 
 	check_block(reg, head);
-	ptr = get_block_ptr(head);
 
 	if(head->mysize == (size_t)-1)
 	{
@@ -1428,7 +1426,7 @@ void merror( const block_head_t* head, char* fmt, ...)
 		fprintf(output_fd, "\nBlock address 0x%p", get_block_ptr(head));
 
 		if(head->mysize != (size_t)-1)
-			fprintf(output_fd, ", size %d bytes\n", head->mysize);
+			fprintf(output_fd, ", size %ld bytes\n", head->mysize);
 
 		print_traces(head, output_fd);
 	}
