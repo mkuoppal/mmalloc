@@ -35,11 +35,6 @@
 
 #include "mmalloc.h"
 #include "mconfig.h"
-#include "mbacktrace.h"
-
-#ifdef BACKTRACE_SYMBOLS
-#include "msymtab.h"
-#endif
 
 #define MIN_BLOCK_SIZE_B    3
 #define MIN_BLOCK_SIZE      (1 << (MIN_BLOCK_SIZE_B))
@@ -326,12 +321,15 @@ static void* alloc_from_pool(unsigned long size)
 	return p;
 }
 
-
 static void print_stack_trace( void* const *a, const int size, FILE* out )
 {
 	int i;
 	int stop = size;
+	char **strings = 0;
 
+#ifdef BACKTRACE_SYMBOLS
+	strings = backtrace_symbols(a, size);
+#endif
 	for(i = 0; i < size; i++)
 	{
 		void* addr = a[i];
@@ -346,10 +344,11 @@ static void print_stack_trace( void* const *a, const int size, FILE* out )
 	{
 		void* addr = a[i];
 
-		fprintf( output_fd, "#%-3d [0x%lx]: ", (stop) - i, (unsigned long)addr);
-#ifdef BACKTRACE_SYMBOLS
-		print_address( addr, 1, out );
-#endif
+		fprintf(out, "#%-3d [0x%lx]: ", (stop) - i, (unsigned long)addr);
+
+		if (strings)
+			fprintf(out, "%s", strings[i]);
+
 		fprintf(out, "\n");
 	}
 }
@@ -377,7 +376,8 @@ static int get_stack_trace(void **array, int size)
 	int trace_len;
 	int i;
 	int store_len;
-	trace_len = getbacktrace(trace, size + TRACE_START_OFFSET + TRACE_END_OFFSET );
+	trace_len = backtrace(trace,
+			      size + TRACE_START_OFFSET + TRACE_END_OFFSET );
 
 	store_len = trace_len - TRACE_START_OFFSET - TRACE_END_OFFSET;
 	if(store_len < 1)

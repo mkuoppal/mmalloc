@@ -1,9 +1,9 @@
 # If you want C++ functionality, put g++ as LIBCC
 
 LIBCC=gcc
-CFLAGS=-Wall -g -D_GNU_SOURCE -fno-omit-frame-pointer -O0 -c
+CFLAGS=-Wall -g3 -D_GNU_SOURCE -fno-omit-frame-pointer -O0 -c
 
-LIBS=-lbfd -liberty
+LIBS=
 CC=$(LIBCC) $(CFLAGS)
 
 ifeq ($(LIBCC), g++)
@@ -26,23 +26,23 @@ endif
 
 all: $(TARGETS)
 
-objects = mmalloc.o mbacktrace.o msymtab.o
+objects = mmalloc.o
 
 libmmalloc.a: $(objects)
-	 ar -r libmmalloc.a $(EXTRALIBS) mmalloc.o mbacktrace.o msymtab.o
+	 ar -r libmmalloc.a $(EXTRALIBS) mmalloc.o
 
 generror: libmmalloc.a generror.o
-	gcc -o generror generror.o libmmalloc.a $(LIBS)
+	gcc -o generror generror.o libmmalloc.a $(LIBS) -rdynamic
 
 ifdef MYCPP
 cpperror: libmmalloc.a cpperror.o
 	gcc -o cpperror libmmalloc.a cpperror.o $(LIBS)
 
-cpperror.o: %.o: %.cpp mmalloc.h mconfig.h msymtab.h mbacktrace.h
+cpperror.o: %.o: %.cpp mmalloc.h mconfig.h
 	$(MYCPP) $< -o $@
 endif
 
-$(objects): %.o: %.c mmalloc.h mconfig.h msymtab.h mbacktrace.h
+$(objects): %.o: %.c mmalloc.h mconfig.h
 	$(CC) $< -o $@
 clean:
 	rm -rf *.o
