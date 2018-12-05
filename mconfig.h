@@ -69,9 +69,10 @@
  *  MMALLOC_MEMSIZE environment variable can also be used, which is in 
  *  kilobytes
 */
-#define KILOBYTE            1024
-#define MEGABYTE            (1024 * KILOBYTE)
-#define MMALLOC_MEMSIZE     (20 * MEGABYTE)
+#define KILOBYTE            1024ull
+#define MEGABYTE            (1024ull * KILOBYTE)
+#define GIGABYTE            (1024ull * MEGABYTE)
+#define MMALLOC_MEMSIZE     (1 * GIGABYTE)
 
 /*
   This is the count of blocks one region contains.
