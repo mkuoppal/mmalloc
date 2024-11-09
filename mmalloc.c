@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <execinfo.h>
 #include <sys/time.h>
+#include <stdint.h>
 
 #define MMALLOC_LIB
 
@@ -48,64 +49,61 @@
 #define ONE_MILLISECOND     (ONE_MICROSECOND * 1000)
 #define ONE_SECOND          (ONE_MILLISECOND * 1000)
 
-#define get_block_head(ptr) (block_head_t*) ( (unsigned char *)(ptr) - sizeof(block_head_t) )
-#define get_block_ptr(head) (unsigned char*)( (unsigned char *)(head) + sizeof(block_head_t))
+#define get_block_head(ptr) (struct block_head*) ((unsigned char *)(ptr) - sizeof(struct block_head))
+#define get_block_ptr(head) (unsigned char*) ((unsigned char *)(head) + sizeof(struct block_head))
 
 #define get_head_from_region(number, reg) \
-                            (block_head_t *) ((unsigned char *)reg->blocks + \
-                            ( (number) * (sizeof(block_head_t) + \
-										  reg->block_size + \
-										  sizeof(block_tail_t))))
+                            (struct block_head *) ((unsigned char *)reg->blocks + \
+                            ( (number) * (sizeof(struct block_head) + \
+				    (reg)->block_size +		      \
+				    sizeof(struct block_tail))))
 
 #define MIN(a,b)             ((a) < (b) ? (a) : (b))
 
-typedef struct region_s     region_t;
-typedef struct block_head_s block_head_t;
-
-struct region_s {
-	region_t*     next;
-	region_t*     free_next;
+struct region {
+	struct region*     next;
+	struct region*     free_next;
 
 	size_t        block_size;
 	unsigned long free_count;
 
-	unsigned char blocks[0];
+	unsigned char blocks[];
 };
 
-struct block_head_s {
-	region_t*     myreg;
-	size_t        mysize;
+struct block_head {
+	struct region*     myreg;
+	size_t             mysize;
 
 #if TRACE_DEPTH > 0
-	void*         alloc_trace[TRACE_DEPTH];
-	void*         free_trace[TRACE_DEPTH];
+	void         *alloc_trace[TRACE_DEPTH];
+	void         *free_trace[TRACE_DEPTH];
 #endif
 
 	unsigned long state_counter;
 	unsigned long magic;
 };
 
-typedef struct {
+struct block_tail {
 	unsigned long magic;
 	unsigned long padding;
-} block_tail_t;
+};
 
 #if PERIOD_PRINT_STATISTICS > 0
 
-typedef struct {
+struct region_chain_stats {
 	unsigned long total_blocks;
 	unsigned long blocks_alloc;
 	unsigned long block_size;
 	unsigned long bytes_alloced;
-} region_chain_stats_t;
+};
 
-typedef struct {
+struct region_stats {
 	unsigned long long bytes;
 	unsigned long long total_alloc_count;
 	unsigned long current_alloc_count;
-} region_stats_t;
+};
 
-static region_stats_t region_stats[MAX_BLOCK_SIZE_B] = { { 0, 0, 0}, };
+static struct region_stats region_stats[MAX_BLOCK_SIZE_B] = { { 0, 0, 0}, };
 
 static unsigned long          mmallocBytesAllocated = 0;
 static unsigned long          applicationBytesAllocated = 0;
@@ -114,13 +112,10 @@ static unsigned long          lastAllocCount = 0;
 static unsigned long          lastCurrentAllocs = 0;
 static unsigned long          maxApplicationBytesAllocated = 0;
 
-static void mdump_mmalloc_state(FILE* out);
-
 #endif
 
-static region_t* all_regions[MAX_BLOCK_SIZE_B] = { 0, };
-static region_t* free_regions[MAX_BLOCK_SIZE_B] = { 0, };
-
+static struct region* all_regions[MAX_BLOCK_SIZE_B] = { 0, };
+static struct region* free_regions[MAX_BLOCK_SIZE_B] = { 0, };
 
 static unsigned long          memPool1_Size = 0;
 static unsigned char*         memPool1 = 0;
@@ -141,19 +136,19 @@ static unsigned long          check_count = 0;
 static unsigned long          not_mmalloc_alloc_count = 0;
 static unsigned long          stop_on_error = 0;
 
-static unsigned long          tailguard_data = 0;
+static uint8_t                tailguard_data = 0;
 
-static void merror( const block_head_t* head, char* fmt, ...);
-static void minfo ( const block_head_t* head, char* fmt, ...);
-static void print_block_data(const unsigned char* start, const unsigned char* end);
+static void merror(const struct block_head* head, const char *fmt, ...);
+static void minfo(const char *fmt, ...);
+static void print_block_data(const unsigned char *start, const unsigned char *end);
 
 
-static unsigned long check_region(region_t* reg, int report_still_alloced, const unsigned long  start_stamp);
+static unsigned long check_region(struct region *reg, int report_still_alloced, const unsigned long  start_stamp);
 static unsigned long mcheck_regions(const int report_still_alloced, const unsigned long start_count);
-static void mmalloc_init();
-static int mmalloc_close_fd();
+static void mmalloc_init(void);
+static int mmalloc_close_fd(void);
 
-static const char mmalloc_version_str[] = "0.23";
+static const char mmalloc_version_str[] = "0.24";
 
 static unsigned long error_count = 0;
 
@@ -161,24 +156,26 @@ static FILE*          output_fd = 0;
 
 static struct timeval print_stats_timestamp;
 
-void mmalloc_disable()
+void mmalloc_disable(void)
 {
 	if(mmalloc_disabled == 0)
 		mmalloc_disabled = 1;
 	else
-		merror(0, "Disabling mmalloc while already disabled\n");
+		merror(NULL, "Disabling mmalloc while already disabled\n");
 }
 
-void mmalloc_enable()
+void mmalloc_enable(void)
 {
 	if(mmalloc_disabled == 1)
 		mmalloc_disabled = 0;
 	else
-		merror(0, "Enabling mmalloc while already enabled\n");
+		merror(NULL, "Enabling mmalloc while already enabled\n");
 }
 
 #if PERIOD_PRINT_STATISTICS > 0
-static void report_stats()
+static void mdump_mmalloc_state(void);
+
+static void report_stats(void)
 {
 	int i;
 	unsigned long long totalAllocations = 0;
@@ -192,7 +189,7 @@ static void report_stats()
 
 	struct timeval current_time;
 
-	mdump_mmalloc_state(output_fd);
+	mdump_mmalloc_state();
 
 	current_allocs = mcheck_regions(0,0);
 
@@ -202,10 +199,10 @@ static void report_stats()
 		{
 
 #ifdef PRINT_REGION_STATISTICS
-			minfo(0, "Block(%d-%d) %llu allocations with %llu bytes, average %llu\n",
-				  (1 << (i-1)), (1 << i),
-				  region_stats[i].total_alloc_count, region_stats[i].bytes, 
-				  region_stats[i].bytes / region_stats[i].total_alloc_count);
+			minfo("Block(%d-%d) %llu allocations with %llu bytes, average %llu\n",
+				(1 << (i-1)), (1 << i),
+				region_stats[i].total_alloc_count, region_stats[i].bytes,
+				region_stats[i].bytes / region_stats[i].total_alloc_count);
 #endif
 			totalAllocations += region_stats[i].total_alloc_count;
 			totalBytes += region_stats[i].bytes;
@@ -214,21 +211,21 @@ static void report_stats()
 
 	if(totalAllocations)
 	{
-		minfo(0, "Current allocs %lu, total allocations %llu with %llu total bytes, average %llu\n",
-			  current_allocs, totalAllocations, totalBytes, totalBytes/totalAllocations);
+		minfo("Current allocs %lu, total allocations %llu with %llu total bytes, average %llu\n",
+			current_allocs, totalAllocations, totalBytes, totalBytes/totalAllocations);
 
 		if(not_mmalloc_alloc_count)
-			minfo(0, "Not mmalloc handler blocks %lu\n", not_mmalloc_alloc_count);
+			minfo("Not mmalloc handler blocks %lu\n", not_mmalloc_alloc_count);
 
-		minfo(0, "Allocated %lu, overhead %lu, total %lu, %3.2f%% free %3.2f%% eff\n",
-			  applicationBytesAllocated, (mmallocBytesAllocated - applicationBytesAllocated),
-			  memPool1_Allocated, 100.0 - (double)(memPool1_Allocated * 100.0)/(double)memPool1_Size,
-			  (double)(applicationBytesAllocated * 100.0) /
-			  ((double)(memPool1_Allocated) + (double)memPool2_Allocated) );
+		minfo("Allocated %lu, overhead %lu, total %lu, %3.2f%% free %3.2f%% eff\n",
+			applicationBytesAllocated, (mmallocBytesAllocated - applicationBytesAllocated),
+			memPool1_Allocated, 100.0 - (double)(memPool1_Allocated * 100.0)/(double)memPool1_Size,
+			(double)(applicationBytesAllocated * 100.0) /
+			((double)(memPool1_Allocated) + (double)memPool2_Allocated) );
 
 		if(memPool2_Size != 0)
-			minfo(0, "Second pool in use %lu, %3.2f%% free\n",
-				  memPool2_Allocated, 100.0 - (double)(memPool2_Allocated * 100.0)/(double)memPool2_Size);
+			minfo("Second pool in use %lu, %3.2f%% free\n",
+				memPool2_Allocated, 100.0 - (double)(memPool2_Allocated * 100.0)/(double)memPool2_Size);
 	}
 
 	gettimeofday(&current_time, NULL);
@@ -244,16 +241,16 @@ static void report_stats()
 	allocDeltaPerSec = (long)(current_allocs - lastCurrentAllocs) *
 		(long long)ONE_SECOND / (long long)timeDiffInMicroseconds;
 
-	minfo(0, "Usage delta: %ld allocs, %ld bytes (%ld allocs/s %ld bytes/s) rate: %lu allocs/s\n",
-		  current_allocs - lastCurrentAllocs,
-		  applicationBytesAllocated - lastApplicationBytesAllocated,
-		  allocDeltaPerSec,
-		  bytesPerSec,
-		  allocsPerSec);
+	minfo("Usage delta: %ld allocs, %ld bytes (%ld allocs/s %ld bytes/s) rate: %lu allocs/s\n",
+		current_allocs - lastCurrentAllocs,
+		applicationBytesAllocated - lastApplicationBytesAllocated,
+		allocDeltaPerSec,
+		bytesPerSec,
+		allocsPerSec);
 
-	minfo(0, "Peak usage %ld application bytes, %ld total bytes\n",
-		  maxApplicationBytesAllocated,
-		  (memPool1_Allocated + memPool2_Allocated));
+	minfo("Peak usage %ld application bytes, %ld total bytes\n",
+		maxApplicationBytesAllocated,
+		(memPool1_Allocated + memPool2_Allocated));
 
 	lastApplicationBytesAllocated = applicationBytesAllocated;
 	lastAllocCount = alloc_count;
@@ -263,9 +260,9 @@ static void report_stats()
 }
 #endif
 
-static inline void mmalloc_check_state(region_t* reg)
+static inline void mmalloc_check_state(struct region* reg)
 {
-	if( freq_check_all && ((check_count % freq_check_all) == 0) )
+	if(freq_check_all && ((check_count % freq_check_all) == 0) )
 	{
 		mcheck_regions(0,0);
 	}
@@ -282,7 +279,7 @@ static inline void mmalloc_check_state(region_t* reg)
 #endif
 }
 
-static inline int is_initialized()
+static int is_initialized(void)
 {
 	if(memPool1_Size)
 		return 1;
@@ -353,7 +350,7 @@ static void print_stack_trace( void* const *a, const int size, FILE* out )
 	}
 }
 
-static void print_traces( const block_head_t* head, FILE* out )
+static void print_traces( const struct block_head* head, FILE* out )
 {
 #if (TRACE_DEPTH > 0)
 	if( head->alloc_trace[0] )
@@ -394,7 +391,7 @@ static inline long find_high_bit(const unsigned long n)
 {
 	register long ret;
 	asm ("bsr %1,%0" : "=g" (ret) : "r" (n));
-	return ret+1;
+	return ret + 1;
 }
 #else
 static inline long find_high_bit(unsigned long n)
@@ -402,8 +399,7 @@ static inline long find_high_bit(unsigned long n)
 	unsigned long mask = 1UL << 31;
 	long bit = 32;
 
-	while (mask)
-	{
+	while (mask) {
 		if (n & mask)
 			return bit;
 
@@ -418,7 +414,7 @@ static inline long find_high_bit(unsigned long n)
 #ifdef DEBUG_FREE_CHAINS
 static void print_free_chain(const int size)
 {
-	region_t* reg;
+	struct region* reg;
 	int entries = 0;
 
 	reg = free_regions[size];
@@ -435,12 +431,11 @@ static void print_free_chain(const int size)
 		printf( " NULL (freechain with %d entries)\n", entries);
 }
 
-static void print_region_chain(region_t* first)
+static void print_region_chain(struct region* first)
 {
-	region_t* reg;
+	struct region* reg;
 	int entries = 0;
 	reg = first;
-
 
 	while(reg)
 	{
@@ -457,7 +452,7 @@ static void print_region_chain(region_t* first)
 #endif
 
 #ifdef CHECK_FREED_BLOCK_DATA
-static inline void insert_freed_block_data(block_head_t* head)
+static inline void insert_freed_block_data(struct block_head* head)
 {
 	memset(get_block_ptr(head), FREED_DATA_MAGIC, head->myreg->block_size);
 }
@@ -465,18 +460,18 @@ static inline void insert_freed_block_data(block_head_t* head)
 #define insert_freed_block_data(x)
 #endif
 
-static region_t* allocate_new_region(const size_t size, const unsigned int block_count)
+static struct region* allocate_new_region(const size_t size, const unsigned int block_count)
 {
-	unsigned long i;
-	region_t* region;
-	block_head_t* head;
-	block_tail_t* tail;
+	struct region* region;
+	struct block_head* head;
+	struct block_tail* tail;
 	unsigned char* block_ptr;
+	unsigned long i;
 
 	const unsigned long block_size =
-		sizeof(block_head_t) + size + sizeof(block_tail_t);
+		sizeof(struct block_head) + size + sizeof(struct block_tail);
 
-	region = (region_t*)alloc_from_pool( sizeof(region_t) + (block_size * block_count) );
+	region = (struct region *)alloc_from_pool(sizeof(struct region) + (block_size * block_count));
 	if(region == 0)
 		return 0;
 
@@ -500,8 +495,8 @@ static region_t* allocate_new_region(const size_t size, const unsigned int block
 #endif
 		block_ptr = get_block_ptr(head);
 
-		tail = (block_tail_t *) ((unsigned char *)(block_ptr) + size);
-		assert( ((unsigned char *)tail - (unsigned char *)block_ptr) == (int)size );
+		tail = (struct block_tail *) ((unsigned char *)(block_ptr) + size);
+		assert(((unsigned char *)tail - (unsigned char *)block_ptr) == (int)size);
 
 		insert_freed_block_data(head);
 
@@ -512,28 +507,25 @@ static region_t* allocate_new_region(const size_t size, const unsigned int block
 	return region;
 }
 
-#if TAILGUARD_LEN > 0
-static inline void insert_tailguard(const block_head_t* head)
+#if TAILGUARD_BYTES > 0
+static inline void insert_tailguard(const struct block_head* head)
 {
-    unsigned long* ptr = (unsigned long *)(get_block_ptr(head) + head->mysize);
-    int j;
+	uint8_t *s = (uint8_t *)(get_block_ptr(head) + head->mysize);
+	const uint8_t * const e = s + TAILGUARD_BYTES;
 
-    for(j = 0; j < (TAILGUARD_LEN >> 2); j++)
-    {
-		*ptr = tailguard_data;
-		ptr++;
-    }
+	while (s < e)
+		*s++ = tailguard_data;
 }
 #else
 #define insert_tailguard(x)
 #endif
 
 #ifdef CHECK_FREED_BLOCK_DATA
-static inline void check_freed_block_integrity(region_t* reg, block_head_t* head)
+static inline void check_freed_block_integrity(struct region* reg, struct block_head* head)
 {
-	unsigned int i;
 	const unsigned int block_size = reg->block_size;
 	const unsigned char* ptr = get_block_ptr(head);
+	unsigned int i;
 
 	for(i = 0; i < block_size; i++)
 	{
@@ -547,24 +539,21 @@ static inline void check_freed_block_integrity(region_t* reg, block_head_t* head
 #define check_freed_block_integrity(x, y)
 #endif
 
-#if TAILGUARD_LEN > 0
-static void print_tailguard_corruption(block_head_t* head);
+#if TAILGUARD_BYTES > 0
+static void print_tailguard_corruption(struct block_head* head);
 
-static inline void check_tailguard(block_head_t* head)
+static inline void check_tailguard(struct block_head* head)
 {
-	const unsigned long* guardptr = (unsigned long *)(get_block_ptr(head) + head->mysize);
-	int i;
+	const uint8_t *s = (uint8_t *)(get_block_ptr(head) + head->mysize);
+	const uint8_t * const e = s + TAILGUARD_BYTES;
 
-	for(i = 0; i < (TAILGUARD_LEN >> 2); i++)
-	{
-		if(*guardptr != tailguard_data)
+	while (s < e) {
+		if(*s++ != tailguard_data)
 			print_tailguard_corruption(head);
-
-		guardptr++;
 	}
 }
 
-static void print_tailguard_corruption(block_head_t* head)
+static void print_tailguard_corruption(struct block_head* head)
 {
 	const unsigned char* start = 0;
 	const unsigned char* end = 0;
@@ -572,9 +561,9 @@ static void print_tailguard_corruption(block_head_t* head)
 
 	int j = 0;
 
-	while(j < TAILGUARD_LEN)
+	while(j < TAILGUARD_BYTES)
 	{
-		if(tailstart[j] != TAILGUARD_CHAR)
+		if(tailstart[j] != TAILGUARD_DATA)
 		{
 			if(start == 0)
 				start = &tailstart[j];
@@ -594,16 +583,16 @@ static void print_tailguard_corruption(block_head_t* head)
 	if(start)
 	{
 		if(end == 0)
-			end = tailstart + TAILGUARD_LEN;
+			end = tailstart + TAILGUARD_BYTES;
 
 #ifdef DUMP_BLOCK_DATA
-		minfo( 0, "Block 0x%x (%d bytes) dump:\n", (unsigned long)get_block_ptr(head), head->mysize);
+		minfo("Block 0x%x (%d bytes) dump:\n", (unsigned long)get_block_ptr(head), head->mysize);
 
 		print_block_data(get_block_ptr(head), get_block_ptr(head) + head->mysize);
 #endif
 
-		minfo( 0, "Block tail, 0x%x is valid tailguard:\n", TAILGUARD_CHAR);
-		print_block_data(get_block_ptr(head) + head->mysize, get_block_ptr(head) + head->mysize + TAILGUARD_LEN);
+		minfo("Block tail, 0x%x is valid tailguard:\n", TAILGUARD_DATA);
+		print_block_data(get_block_ptr(head) + head->mysize, get_block_ptr(head) + head->mysize + TAILGUARD_BYTES);
 
 		merror(head, "BLOCK TAIL OVERWRITE at offset %d, len %d",
 			   start - tailstart, end - start);
@@ -614,11 +603,11 @@ static void print_tailguard_corruption(block_head_t* head)
 #define check_tailguard(x)
 #endif
 
-static int check_block(region_t* orgreg, block_head_t* head)
+static int check_block(struct region* orgreg, struct block_head* head)
 {
-	block_tail_t* tail = 0;
-	region_t* reg;
+	struct block_tail *tail = NULL;
 	unsigned char* ptr = get_block_ptr(head);
+	struct region* reg;
 
 	reg = head->myreg;
 	if(reg != orgreg)
@@ -640,7 +629,7 @@ static int check_block(region_t* orgreg, block_head_t* head)
 
 	insert_tailguard(head);
 
-	tail = (block_tail_t*) ((unsigned char *)(ptr) + reg->block_size);
+	tail = (struct block_tail *) ((unsigned char *)(ptr) + reg->block_size);
 
 	if(tail->magic != TAIL_MAGIC)
 		merror(head, "BLOCK TAILMAGIC CORRUPTED");
@@ -648,9 +637,9 @@ static int check_block(region_t* orgreg, block_head_t* head)
 	return head->mysize;
 }
 
-static unsigned long check_region(region_t* reg, int report_still_alloced, const unsigned long start_stamp)
+static unsigned long check_region(struct region* reg, int report_still_alloced, const unsigned long start_stamp)
 {
-	block_head_t* head;
+	struct block_head* head;
 	unsigned long freecount = 0;
 	unsigned int i = 0;
 
@@ -669,7 +658,7 @@ static unsigned long check_region(region_t* reg, int report_still_alloced, const
 	return BLOCKS_IN_REGION - freecount;
 }
 
-static unsigned long check_region_chain(region_t* reg, const int report_still_alloced, const int start_stamp)
+static unsigned long check_region_chain(struct region* reg, const int report_still_alloced, const int start_stamp)
 {
 	unsigned long currently_allocated = 0;
 
@@ -686,10 +675,10 @@ static unsigned long check_region_chain(region_t* reg, const int report_still_al
 	return currently_allocated;
 }
 
-static inline block_head_t* find_free_block(region_t* reg)
+static inline struct block_head* find_free_block(struct region* reg)
 {
 	unsigned int i = 0;
-	block_head_t* head;
+	struct block_head* head;
 
 	while(i < BLOCKS_IN_REGION)
 	{
@@ -706,7 +695,7 @@ static inline block_head_t* find_free_block(region_t* reg)
 }
 
 #if (TRACE_DEPTH > 0)
-static inline void store_alloc_trace(block_head_t* head)
+static inline void store_alloc_trace(struct block_head* head)
 {
 	int stored;
 	stored = get_stack_trace( head->alloc_trace, TRACE_DEPTH);
@@ -720,7 +709,7 @@ static inline void store_alloc_trace(block_head_t* head)
 #endif
 
 #if (TRACE_DEPTH > 0)
-static inline void store_free_trace(block_head_t* head)
+static inline void store_free_trace(struct block_head* head)
 {
 	int stored;
 	stored = get_stack_trace( head->free_trace, TRACE_DEPTH);
@@ -731,16 +720,17 @@ static inline void store_free_trace(block_head_t* head)
 #define store_free_trace(x)
 #endif
 
-static inline block_head_t* alloc_block_from_region(region_t* reg, const size_t size)
+static inline struct block_head *
+alloc_block_from_region(struct region* reg, const size_t size)
 {
-	block_head_t* head;
+	struct block_head *head;
 
 	head = find_free_block(reg);
 
 	if(head)
 	{
 #if PERIOD_PRINT_STATISTICS > 0
-		region_stats_t* stats;
+		struct region_stats *stats;
 		int sizeb;
 #endif
 
@@ -780,9 +770,9 @@ static inline block_head_t* alloc_block_from_region(region_t* reg, const size_t 
 	return head;
 }
 
-static inline void free_block(block_head_t* head)
+static inline void free_block(struct block_head* head)
 {
-	region_t* reg;
+	struct region* reg;
 
 	reg = head->myreg;
 
@@ -809,7 +799,7 @@ static inline void free_block(block_head_t* head)
 
 		if(reg->free_count == 1)
 		{
-			region_t** free_list;
+			struct region** free_list;
 			const int bsize = find_high_bit((reg->block_size-1));
 
 			free_list = &free_regions[bsize];
@@ -835,7 +825,7 @@ static inline void free_block(block_head_t* head)
 
 }
 
-static inline region_t* find_block_region(const block_head_t* head)
+static inline struct region* find_block_region(const struct block_head* head)
 {
 	if(head->magic != HEAD_MAGIC)
 	{
@@ -845,10 +835,10 @@ static inline region_t* find_block_region(const block_head_t* head)
 	return head->myreg;
 }
 
-static region_t* get_free_region(const size_t size)
+static struct region* get_free_region(const size_t size)
 {
-	region_t** free_list;
-	region_t*  reg;
+	struct region** free_list;
+	struct region*  reg;
 	int sizeb;
 
 	if( size < MIN_BLOCK_SIZE )
@@ -860,7 +850,7 @@ static region_t* get_free_region(const size_t size)
 
 	if(*free_list == 0)
 	{
-		region_t**      all_list;
+		struct region**      all_list;
 
 		reg = allocate_new_region( (1 << sizeb), BLOCKS_IN_REGION );
 		if(reg == 0)
@@ -896,13 +886,12 @@ static region_t* get_free_region(const size_t size)
 }
 
 #if (PERIOD_PRINT_STATISTICS > 0)
-static int dump_region_chain(region_chain_stats_t* data,
-			     region_t* reg,
-			     FILE* out)
+static int dump_region_chain(struct region_chain_stats *data,
+			     struct region *reg)
 {
-	int i;
+	struct block_head *head;
 	int region_count;
-	block_head_t* head;
+	int i;
 
 	region_count = 0;
 	data->total_blocks = 0;
@@ -936,30 +925,30 @@ static int dump_region_chain(region_chain_stats_t* data,
 	return region_count;
 }
 
-void print_region_data(region_chain_stats_t* data, FILE* out)
+#ifdef PRINT_REGION_STATISTICS
+static void print_region_data(region_chain_stats_t* data, FILE* out)
 {
 	fprintf(out, " Blocks: (%lu, allocated: %lu, free %lu)",
 			data->total_blocks, data->blocks_alloc, (data->total_blocks - data->blocks_alloc));
 	fprintf(out, " Bytes: (alloced %lu, free %lu) ",
 			data->bytes_alloced, (data->total_blocks - data->blocks_alloc) * data->block_size);
 }
+#endif
 
-void mdump_mmalloc_state(FILE* out)
+static void mdump_mmalloc_state(void)
 {
-	int i;
-	int count;
-	region_chain_stats_t region_data;
+	struct region_chain_stats region_data;
 	int total_bytes = 0;
 	int total_allocs = 0;
+	int count;
+	int i;
 
-	minfo(0, "\n *** MMALLOC STATISTICS ***\n");
+	minfo("\n *** MMALLOC STATISTICS ***\n");
 
-	for(i = MIN_BLOCK_SIZE_B; i < MAX_BLOCK_SIZE_B; i++)
-	{
-		count = dump_region_chain(&region_data, all_regions[i], out);
+	for(i = MIN_BLOCK_SIZE_B; i < MAX_BLOCK_SIZE_B; i++) {
+		count = dump_region_chain(&region_data, all_regions[i]);
 
-		if(count)
-		{
+		if(count) {
 			total_bytes += region_data.bytes_alloced;
 			total_allocs += region_data.blocks_alloc;
 
@@ -973,7 +962,7 @@ void mdump_mmalloc_state(FILE* out)
 		}
 	}
 
-	minfo(0, " MMALLOC has alloced %d bytes in %d allocs\n", total_bytes, total_allocs );
+	minfo(" MMALLOC has alloced %d bytes in %d allocs\n", total_bytes, total_allocs);
 }
 #endif
 
@@ -982,12 +971,10 @@ int mmalloc_set_output_file(const char* const filename)
 	FILE* f;
 
 	f = fopen(filename, "a");
-	if(f != NULL)
-	{
-		return mmalloc_set_output_fd(f);
-	}
+	if (!f)
+		return 0;
 
-	return 0;
+	return mmalloc_set_output_fd(f);
 }
 
 int mmalloc_set_output_fd(FILE* fd)
@@ -999,7 +986,7 @@ int mmalloc_set_output_fd(FILE* fd)
 	return r;
 }
 
-static int mmalloc_close_fd()
+static int mmalloc_close_fd(void)
 {
 	if(output_fd != stderr)
 	{
@@ -1020,8 +1007,8 @@ void mmalloc_exit(mmalloc_state_t s)
 	mmalloc_report_state(s);
 	mmalloc_report_stats();
 
-	minfo(0, "Total errors %u\n", error_count);
-	minfo(0, "mmalloc_exit() done\n");
+	minfo("Total errors %u\n", error_count);
+	minfo("mmalloc_exit() done\n");
 
 	if(output_fd != stderr)
 	{
@@ -1049,7 +1036,7 @@ void mmalloc_exit(mmalloc_state_t s)
 	}
 }
 
-void mmalloc_init()
+void mmalloc_init(void)
 {
 	char* ofilename;
 
@@ -1068,16 +1055,7 @@ void mmalloc_init()
 		mmalloc_set_output_file(ofilename);
 	}
 
-	minfo(0, "mmalloc v%s\n", mmalloc_version_str);
-
-	if( TAILGUARD_LEN & 0x02 )
-	{
-		merror(0, "TAILGUARD_LEN has to be aligned with 4 bytes");
-		abort();
-	}
-
-	tailguard_data = ( (TAILGUARD_CHAR << 24) | (TAILGUARD_CHAR << 16) |
-					   (TAILGUARD_CHAR << 8 | TAILGUARD_CHAR ) );
+	minfo("mmalloc v%s\n", mmalloc_version_str);
 
 	if( MIN_BLOCK_SIZE_B < 2 )
 	{
@@ -1136,13 +1114,13 @@ void mmalloc_init()
 		memPool1_Allocated = 0;
 		memPool2_Allocated = 0;
 
-		minfo(0, "Pool1: Allocated %lu bytes (%lu Megabytes) of memory\n",
-			  memPool1_Size, (memPool1_Size/(1024*1024)));
+		minfo("Pool1: Allocated %lu bytes (%lu Megabytes) of memory\n",
+			memPool1_Size, (memPool1_Size/(1024*1024)));
 
 		if(memPool2_Size > 0)
 		{
-			minfo(0, "Pool2: Allocated %lu bytes (%lu Megabytes) of memory\n",
-				  memPool2_Size, (memPool2_Size/(1024*1024)));
+			minfo("Pool2: Allocated %lu bytes (%lu Megabytes) of memory\n",
+				memPool2_Size, (memPool2_Size/(1024*1024)));
 		}
 	}
 
@@ -1154,7 +1132,7 @@ void mmalloc_report_state(mmalloc_state_t mstamp)
 	if(mstamp > 0)
 	{
 		stop_on_error = 0;
-		minfo(0, "MMALLOC State report START: from %ld to %ld\n", mstamp, alloc_count);
+		minfo("MMALLOC State report START: from %ld to %ld\n", mstamp, alloc_count);
 	}
 
 	mcheck_regions(1, mstamp);
@@ -1163,28 +1141,28 @@ void mmalloc_report_state(mmalloc_state_t mstamp)
 	{
 		stop_on_error = STOP_ON_ERROR;
 
-		minfo(0, "MMALLOC State report END\n");
+		minfo("MMALLOC State report END\n");
 	}
 }
 
-void mmalloc_report_stats()
+void mmalloc_report_stats(void)
 {
 #if PERIOD_PRINT_STATISTICS > 0
 	report_stats();
 #endif
 }
 
-unsigned long mmalloc_get_state()
+unsigned long mmalloc_get_state(void)
 {
 	return alloc_count;
 }
 
 void* mrealloc(void* ptr, size_t size)
 {
-	if(mmalloc_disabled == 0)
+	if(!mmalloc_disabled)
 	{
 		void* newptr;
-		block_head_t* head;
+		struct block_head* head;
 
 		head = get_block_head(ptr);
 
@@ -1208,14 +1186,14 @@ void* mrealloc(void* ptr, size_t size)
 
 void* mcalloc(size_t nelems, size_t elemsize)
 {
-	if(mmalloc_disabled == 0)
+	if(!mmalloc_disabled)
 	{
 		void* ptr;
-		region_t* reg;
+		struct region* reg;
 
 		const size_t size = nelems * elemsize;
 
-		reg = get_free_region( (nelems * size) + TAILGUARD_LEN );
+		reg = get_free_region( (nelems * size) + TAILGUARD_BYTES );
 
 		if(reg == 0)
 			return NULL;
@@ -1223,7 +1201,6 @@ void* mcalloc(size_t nelems, size_t elemsize)
 		mmalloc_check_state(reg);
 
 		ptr = get_block_ptr(alloc_block_from_region(reg, size));
-
 		if(ptr)
 			memset(ptr, 0, size);
 
@@ -1238,10 +1215,12 @@ void* mcalloc(size_t nelems, size_t elemsize)
 
 void* mmalloc(size_t size)
 {
-	if(mmalloc_disabled == 0)
+	void *p;
+
+	if(!mmalloc_disabled)
 	{
-		const int total_size = size + TAILGUARD_LEN;
-		region_t* reg;
+		const int total_size = size + TAILGUARD_BYTES;
+		struct region* reg;
 
 		reg = get_free_region(total_size);
 		if(reg == 0)
@@ -1249,37 +1228,30 @@ void* mmalloc(size_t size)
 
 		mmalloc_check_state(reg);
 
-		return get_block_ptr( alloc_block_from_region(reg, size) );
+		p = get_block_ptr(alloc_block_from_region(reg, size));
 	}
 	else
 	{
 		not_mmalloc_alloc_count++;
-		return malloc(size);
+		p = malloc(size);
 	}
+
+	return p;
 }
 
 void mfree(void *ptr)
 {
-	if(mmalloc_disabled == 0)
+	if (!ptr)
+		return;
+
+	if(!mmalloc_disabled)
 	{
-		region_t* reg;
+		struct region *reg;
 
-		if(ptr == 0)
-		{
-			merror(0, "FREEING NULL POINTER\n");
-			return;
-		}
-
-		reg = find_block_region( get_block_head(ptr) );
-
-		if(reg)
-		{
-			mmalloc_check_state(reg);
-
-			free_block( get_block_head(ptr) );
-		}
-		else
-		{
+		reg = find_block_region(get_block_head(ptr) );
+		if(reg) {
+			free_block(get_block_head(ptr));
+		} else {
 			merror(0, "FREEING UNKNOWN POINTER  %lx\n", ptr);
 		}
 	}
@@ -1310,7 +1282,7 @@ unsigned long mcheck_regions(const int report_still_alloced, const unsigned long
 	return currently_allocated;
 }
 
-void print_time(FILE *out)
+static void print_time(FILE *out)
 {
 #define TIME_BUFFER_LEN   1024
 	char buf[TIME_BUFFER_LEN];
@@ -1382,7 +1354,7 @@ void print_block_data(const unsigned char* start, const unsigned char* end)
 	}
 }
 
-void minfo ( const block_head_t* head, char* fmt, ...)
+void minfo(const char *fmt, ...)
 {
 	va_list ap;
 
@@ -1397,7 +1369,7 @@ void minfo ( const block_head_t* head, char* fmt, ...)
 	fflush(output_fd);
 }
 
-void merror( const block_head_t* head, char* fmt, ...)
+void merror(const struct block_head* head, const char *fmt, ...)
 {
 #define ERROR_TRACE_LEN   50
 
@@ -1477,7 +1449,7 @@ char* mstrndup(const char* s, size_t size)
 		return NULL;
 }
 
-int mmalloc_check()
+int mmalloc_check(void)
 {
 	mcheck_regions(0, 0);
 

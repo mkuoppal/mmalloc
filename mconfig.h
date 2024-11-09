@@ -1,5 +1,5 @@
 /*
- *  mmalloc - dynamic memory checker 
+ *  mmalloc - dynamic memory checker
  *
  *  Copyright (C) 2002 Mika Kuoppala <miku@iki.fi>
  *
@@ -24,17 +24,17 @@
 #define __MCONFIG_H__
 
 /*
- *  In Every memory management call PERIOD_CHECK_EVERYTHING value is 
- *  checked and if this is PERIOD_CHECK_EVERYTHING:th call, 
- *  then ALL memory regions and ALL blocks withing them are 
+ *  In Every memory management call PERIOD_CHECK_EVERYTHING value is
+ *  checked and if this is PERIOD_CHECK_EVERYTHING:th call,
+ *  then ALL memory regions and ALL blocks withing them are
  *  checked for errors
  */
 
 #define PERIOD_CHECK_EVERYTHING  1000
 
 /*
- *  In Every memory management call PERIOD_CHECK_NEAREST_BLOCKS value is 
- *  checked and if this PERIOD_CHECK_NEAREST_BLOCKS:th call, then the 
+ *  In Every memory management call PERIOD_CHECK_NEAREST_BLOCKS value is
+ *  checked and if this PERIOD_CHECK_NEAREST_BLOCKS:th call, then the
  *  current memory memory region and all blocks within it are checked for
  *  errors
  */
@@ -50,7 +50,7 @@
 #define PERIOD_PRINT_STATISTICS  1000000
 
 /*
- * Enabling this will give information about each region 
+ * Enabling this will give information about each region
  * when statistics are printed
  *
  */
@@ -59,14 +59,14 @@
 
 /*
  * If memory management error is found, should be stop or continue
- * This is the number of errors before stopping 
+ * This is the number of errors before stopping
  */
 
 #define STOP_ON_ERROR 1
 
 /*
  *  How many megs to allocate for pool
- *  MMALLOC_MEMSIZE environment variable can also be used, which is in 
+ *  MMALLOC_MEMSIZE environment variable can also be used, which is in
  *  kilobytes
 */
 #define KILOBYTE            1024ull
@@ -89,10 +89,10 @@
 #define DUMP_BLOCK_DATA
 
 /*
- * Length of tailguards (bytes), keep this as aligned with 4 bytes
+ * Length of tailguards (bytes)
  */
-#define TAILGUARD_LEN       8
-#define TAILGUARD_CHAR      (unsigned char)(0xBF)
+#define TAILGUARD_BYTES     8
+#define TAILGUARD_DATA      (uint8_t)(0xBF)
 
 /*
  * If CHECK_FREED_BLOCK_DATA is defined, then when block is freed
@@ -112,9 +112,8 @@
 
 /*
  * If BACKTRACE_SYMBOLS is defined, when displaying backtraces
- * also symbolic names for adresses are dug out.
+ * also symbolic names for addresses are dug out.
  */
-
 #define BACKTRACE_SYMBOLS
 
 /*
@@ -126,7 +125,7 @@
 #define TRACE_DEPTH            16
 
 #ifdef __cplusplus
-#define TRACE_START_OFFSET     1   
+#define TRACE_START_OFFSET     1
 #define TRACE_END_OFFSET       1
 #else
 #define TRACE_START_OFFSET     3
@@ -137,6 +136,6 @@
  * This will make finding memory blocks faster by using i386 assember
  */
 
-#define I386_FIND_HIGH_BIT     
+#define I386_FIND_HIGH_BIT
 
 #endif
