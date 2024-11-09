@@ -1157,12 +1157,41 @@ unsigned long mmalloc_get_state(void)
 	return alloc_count;
 }
 
+void* mmalloc(size_t size)
+{
+	void *p;
+
+	if(!mmalloc_disabled)
+	{
+		const int total_size = size + TAILGUARD_BYTES;
+		struct region* reg;
+
+		reg = get_free_region(total_size);
+		if(reg == 0)
+			return NULL;
+
+		mmalloc_check_state(reg);
+
+		p = get_block_ptr(alloc_block_from_region(reg, size));
+	}
+	else
+	{
+		not_mmalloc_alloc_count++;
+		p = malloc(size);
+	}
+
+	return p;
+}
+
 void* mrealloc(void* ptr, size_t size)
 {
 	if(!mmalloc_disabled)
 	{
 		void* newptr;
 		struct block_head* head;
+
+		if (!ptr)
+			return mmalloc(size);
 
 		head = get_block_head(ptr);
 
@@ -1211,32 +1240,6 @@ void* mcalloc(size_t nelems, size_t elemsize)
 		not_mmalloc_alloc_count++;
 		return calloc(nelems, elemsize);
 	}
-}
-
-void* mmalloc(size_t size)
-{
-	void *p;
-
-	if(!mmalloc_disabled)
-	{
-		const int total_size = size + TAILGUARD_BYTES;
-		struct region* reg;
-
-		reg = get_free_region(total_size);
-		if(reg == 0)
-			return NULL;
-
-		mmalloc_check_state(reg);
-
-		p = get_block_ptr(alloc_block_from_region(reg, size));
-	}
-	else
-	{
-		not_mmalloc_alloc_count++;
-		p = malloc(size);
-	}
-
-	return p;
 }
 
 void mfree(void *ptr)

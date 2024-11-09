@@ -1,5 +1,5 @@
 /*
- *  mmalloc - dynamic memory checker 
+ *  mmalloc - dynamic memory checker
  *
  *  Copyright (C) 2002,2003,2004 Mika Kuoppala <miku@iki.fi>
  *
@@ -49,13 +49,13 @@ extern "C" {
 
 typedef unsigned long mmalloc_state_t;
 
-mmalloc_state_t mmalloc_get_state();
+mmalloc_state_t mmalloc_get_state(void);
 void mmalloc_report_state(mmalloc_state_t s);
-void mmalloc_report_stats();
-int  mmalloc_check();
+void mmalloc_report_stats(void);
+int  mmalloc_check(void);
 
-void mmalloc_disable();
-void mmalloc_enable();
+void mmalloc_disable(void);
+void mmalloc_enable(void);
 
 int mmalloc_set_output_fd(FILE* fd);
 int mmalloc_set_output_file(const char* const filename);
