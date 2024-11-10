@@ -1424,32 +1424,30 @@ void merror(const struct block_head* head, const char *fmt, ...)
 
 char* mstrdup(const char *s)
 {
-	const int len = strlen(s);
-	char* new_s = (char *)mmalloc(len+1);
+	const size_t len = strlen(s);
+	char * const n = (char *)mmalloc(len + 1);
 
-	if(new_s)
-	{
-		strcpy(new_s, s);
-		return new_s;
-	}
-	else
+	if (!n)
 		return NULL;
+
+	strcpy(n, s);
+
+	return n;
 }
 
 char* mstrndup(const char* s, size_t size)
 {
 	const size_t len = strlen(s);
-	int newlen = MIN(len, size);
-	char* new_s = (char *)mmalloc(newlen+1);
+	const size_t newlen = MIN(len, size);
+	char * const n = (char *)mmalloc(newlen + 1);
 
-	if(new_s)
-	{
-		strncpy(new_s, s, newlen);
-		new_s[newlen] = 0;
-		return new_s;
-	}
-	else
+	if (!n)
 		return NULL;
+
+	strncpy(n, s, newlen);
+	n[newlen] = 0;
+
+	return n;
 }
 
 int mmalloc_check(void)

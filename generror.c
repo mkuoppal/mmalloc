@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <assert.h>
 
 #ifndef WIN32
 #include <unistd.h>
@@ -32,11 +33,9 @@ void corrupt_block(void* ptr, int block_size, int offset)
 void test_stress()
 {
 	int k = 0;
-	
+
 	while(k++ < OUT_LOOP_COUNT)
-	{	
 		alloc_free_chain();
-	}	
 }
 
 void test_corrupt()
@@ -50,7 +49,7 @@ void test_corrupt()
 void test_leak()
 {
 	char* leak = (char *)malloc(100);
-	
+
 	leak[0] = 0;
 }
 
@@ -58,7 +57,7 @@ void test_usefreed()
 {
 	char* p = (char *)malloc(100);
 	free(p);
-	
+
 	p[4] = 'j';
 }
 
@@ -69,7 +68,7 @@ void test_strdup()
 	char *s1_copy, *s2_copy;
 	char *s1_mcopy, *s2_mcopy;
 	char *stmp;
-	
+
 	mmalloc_state_t m_state1;
 
 	s1_copy = strdup(s1);
@@ -77,20 +76,37 @@ void test_strdup()
 
 	s1_mcopy = strndup(s1, 5);
 	s2_mcopy = strndup(s2, 5);
-	
+
 	m_state1 = mmalloc_get_state();
 
 	stmp = strndup(s1, 5);
 
 	mmalloc_report_state(m_state1);
-	
+
 	free(stmp);
-	
+
 	free(s1_copy);
 	free(s2_copy);
-	
+
 	free(s1_mcopy);
 	free(s2_mcopy);
+}
+
+void test_zerosize(void)
+{
+	void *a, *b;
+
+	a = malloc(0);
+	assert(a);
+	b = malloc(0);
+	assert(b);
+
+	mmalloc_report_stats();
+
+	free(a);
+	free(b);
+
+	free(NULL);
 }
 
 void func1()
@@ -106,13 +122,13 @@ void func2()
 void func3()
 {
 #define CHECK_TEST( x ) if(strcmp( #x, cmd) == 0) { printf("Running test: %s\n", #x ); test_##x(); ; printf("Test %s done.\n", #x ); return;}
-	
+
 	CHECK_TEST( leak );
 	CHECK_TEST( stress );
 	CHECK_TEST( corrupt );
 	CHECK_TEST( usefreed );
 	CHECK_TEST( strdup );
-	
+	CHECK_TEST( zerosize );
 	printf("no such test as: %s\n", cmd);
 
 #undef CHECK_TEST
@@ -123,7 +139,7 @@ int main(int argc, char *argv[])
 {
 	if(argc != 2)
 	{
-		printf("Usage: %s [leak|stress|corrupt|usefreed|strdup]\n", argv[0]);
+		printf("Usage: %s [leak|stress|corrupt|usefreed|strdup|zerosize]\n", argv[0]);
 		return 1;
 	}
 
@@ -147,7 +163,7 @@ int alloc_free_chain()
 
 	if( (rand() % 20) == 0)
 		alloc_free_chain();
-	
+
 	rand_count = rand() % LOOP_COUNT;
 	for(i = 0; i < rand_count; i++)
 	{
@@ -160,14 +176,13 @@ int alloc_free_chain()
 		if(!p[i])
 			printf("Error in alloc\n");
 	}
-	
+
 	for(i = 0; i < rand_count; i++)
 	{
 		if(p[i])
 			mfree(p[i]);
-		
-	}
-	
-	return 0;
-}	
 
+	}
+
+	return 0;
+}
